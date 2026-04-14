@@ -1,0 +1,82 @@
+[project]
+name = "promptcrab"
+dynamic = ["version"]
+description = "Prompt rewrite pipeline with verifier and token counting."
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Promptcrab Contributors" }]
+maintainers = [{ name = "Promptcrab Contributors" }]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Utilities",
+]
+keywords = ["cli", "llm", "prompt", "rewrite"]
+dependencies = [
+    "python-dotenv[cli]>=1.1.0",
+    "tiktoken>=0.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/conscientiousness/promptcrab"
+Repository = "https://github.com/conscientiousness/promptcrab"
+Issues = "https://github.com/conscientiousness/promptcrab/issues"
+Changelog = "https://github.com/conscientiousness/promptcrab/blob/main/CHANGELOG.md"
+
+[project.scripts]
+promptcrab = "promptcrab.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pyright>=1.1.400",
+    "ruff>=0.11.0",
+    "twine>=6.1.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+]
+
+[tool.pyright]
+include = ["src", "tests", "prompt_rewrite_pipeline.py"]
+extraPaths = ["src"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/promptcrab/__about__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/promptcrab"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/.env.example",
+    "/CHANGELOG.md",
+    "/README.md",
+    "/pyproject.toml",
+    "/prompt_rewrite_pipeline.py",
+    "/scripts",
+    "/src",
+    "/tests",
+]

@@ -1,0 +1,8 @@
+.env
+.venv/
+__pycache__/
+.pyright/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
