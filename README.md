@@ -1,8 +1,8 @@
 # promptcrab
 
 [![CI](https://github.com/conscientiousness/promptcrab/actions/workflows/ci.yml/badge.svg)](https://github.com/conscientiousness/promptcrab/actions/workflows/ci.yml)
-[![PyPI version](https://img.shields.io/pypi/v/promptcrab)](https://pypi.org/project/promptcrab/)
-[![Python versions](https://img.shields.io/pypi/pyversions/promptcrab)](https://pypi.org/project/promptcrab/)
+[![PyPI version](https://img.shields.io/pypi/v/promptcrab.svg?cacheSeconds=300)](https://pypi.org/project/promptcrab/)
+[![Python >=3.12](https://img.shields.io/badge/python-%3E%3D3.12-blue)](https://pypi.org/project/promptcrab/)
 
 `promptcrab` is a CLI for rewriting prompts for downstream LLMs with lower token cost and strict fidelity checks.
 
