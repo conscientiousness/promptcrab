@@ -1,13 +1,23 @@
 <p align="center">
-  <img src="assets/promptcrab-banner.png" alt="promptcrab pixel art banner" width="100%" />
+  <a href="https://github.com/conscientiousness/promptcrab/actions/workflows/ci.yml"><img src="https://github.com/conscientiousness/promptcrab/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://pypi.org/project/promptcrab/"><img src="https://img.shields.io/pypi/v/promptcrab.svg?cacheSeconds=300" alt="PyPI version" /></a>
+  <a href="https://pypi.org/project/promptcrab/"><img src="https://img.shields.io/badge/python-%3E%3D3.12-blue" alt="Python >=3.12" /></a>
 </p>
 
 <h1 align="center">promptcrab</h1>
 
+<p align="center"><strong>Keep the meaning. Trim the spell.</strong></p>
+
 <p align="center">
-  <a href="https://github.com/conscientiousness/promptcrab/actions/workflows/ci.yml"><img src="https://github.com/conscientiousness/promptcrab/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://pypi.org/project/promptcrab/"><img src="https://img.shields.io/pypi/v/promptcrab.svg?cacheSeconds=300" alt="PyPI version" /></a>
-  <a href="https://pypi.org/project/promptcrab/"><img src="https://img.shields.io/badge/python-%3E%3D3.12-blue" alt="Python >=3.12" /></a>
+  <a href="./README.md">English</a> ·
+  <a href="./README.zh-TW.md">繁體中文</a> ·
+  <a href="#installation">Installation</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#current-model-guidance">Model Guidance</a>
+</p>
+
+<p align="center">
+  <img src="assets/promptcrab-banner.png" alt="promptcrab pixel art banner" width="80%" />
 </p>
 
 `promptcrab` is a CLI for rewriting prompts for downstream LLMs with lower token cost and strict fidelity checks.
