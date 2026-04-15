@@ -7,6 +7,11 @@ Return only the rewritten prompt, with no commentary.
 """
 
 LANGUAGE_LABELS = {
+    "preserve": (
+        "the original language only. Do not translate. Use a conservative copy-edit that"
+        " preserves literal text, formatting templates, markers, separators, symbols, and"
+        " quoted/verbatim spans exactly"
+    ),
     "zh": "modern Chinese",
     "wenyan": (
         "Classical Chinese (Wenyan) only when it remains technically precise and does not harm"

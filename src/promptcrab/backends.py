@@ -15,6 +15,7 @@ from promptcrab.errors import PipelineError
 from promptcrab.models import PipelineConfig
 from promptcrab.parsing import (
     extract_gemini_cli_result,
+    extract_opencode_result,
     gemini_extract_text,
     stringify_unknown_content,
 )
@@ -322,6 +323,64 @@ class CodexCLIBackend(BaseBackend):
         return len(text), "character_count_fallback"
 
 
+class OpenCodeCLIBackend(BaseBackend):
+    name = "opencode_cli"
+
+    def __init__(
+        self,
+        model: str,
+        executable: str = "opencode",
+        reasoning_effort: str | None = None,
+    ) -> None:
+        super().__init__(model=model)
+        self.executable = executable
+        self.reasoning_effort = reasoning_effort
+        if shutil.which(self.executable) is None:
+            raise PipelineError(f"Could not find {self.executable!r} in PATH.")
+
+    def generate(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        json_schema: dict[str, Any] | None = None,
+        max_output_tokens: int | None = None,
+        timeout: int = 300,
+    ) -> tuple[str, dict[str, Any]]:
+        if max_output_tokens is not None:
+            raise PipelineError("--max-output-tokens is not supported for opencode_cli.")
+        final_prompt = combine_system_user(system_prompt, user_prompt)
+        command = [
+            self.executable,
+            "run",
+            "-m",
+            self.model,
+            "--format",
+            "json",
+        ]
+        if self.reasoning_effort is not None:
+            command.extend(["--variant", self.reasoning_effort])
+        if json_schema is not None:
+            final_prompt += (
+                "\n\nReturn JSON only. The response must conform to this JSON Schema:\n"
+                + json.dumps(json_schema, ensure_ascii=False)
+            )
+        command.append(final_prompt)
+        stdout, stderr = run_subprocess(command, input_text=None, timeout=timeout)
+        text, payload = extract_opencode_result(stdout)
+        return text.strip(), {
+            "raw": payload,
+            "stderr": stderr,
+            "command": command,
+        }
+
+    def count_text_tokens(self, text: str, timeout: int = 120) -> tuple[int, str]:
+        fallback = maybe_tiktoken_count(self.model, text)
+        if fallback is not None:
+            return fallback, "tiktoken_fallback"
+        return len(text), "character_count_fallback"
+
+
 def build_backend(config: PipelineConfig) -> BaseBackend:
     if config.backend == "minimax":
         return MiniMaxBackend(
@@ -336,6 +395,12 @@ def build_backend(config: PipelineConfig) -> BaseBackend:
             model=config.model,
             executable=config.gemini_executable,
             api_key=config.gemini_api_key,
+        )
+    if config.backend == "opencode_cli":
+        return OpenCodeCLIBackend(
+            model=config.model,
+            executable=config.opencode_executable,
+            reasoning_effort=config.codex_reasoning_effort,
         )
     return CodexCLIBackend(
         model=config.model,

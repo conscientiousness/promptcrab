@@ -7,8 +7,31 @@ def combine_system_user(system_prompt: str, user_prompt: str) -> str:
     return f"[SYSTEM INSTRUCTION]\n{system_prompt.strip()}\n\n[TASK]\n{user_prompt.strip()}\n"
 
 
-def build_rewrite_user_prompt(original_prompt: str, lang: str) -> str:
+def build_rewrite_user_prompt(
+    original_prompt: str,
+    lang: str,
+    *,
+    conservative: bool = False,
+    risk_tags: tuple[str, ...] = (),
+) -> str:
     language = LANGUAGE_LABELS[lang]
+    conservative_block = ""
+    if conservative:
+        tags = ", ".join(risk_tags) if risk_tags else "literal_sensitive"
+        conservative_block = textwrap.dedent(
+            f"""
+
+            Conservative preflight mode:
+            - triggered tags: {tags}
+            - do not translate the prompt
+            - do not normalize symbols or punctuation such as ^2, *, ***, P.P.S, >=, <=, or brackets
+            - preserve format examples, separators, bullet scaffolds, quoted text, and
+              verbatim text exactly
+            - preserve exact wording around repeat/copy/quote instructions
+            - prefer returning the original prompt unchanged over an aggressive rewrite
+            - only remove obvious filler when doing so cannot affect literal or format behavior
+            """
+        ).rstrip()
     return textwrap.dedent(
         f"""
         Rewrite the ORIGINAL_PROMPT into {language}.
@@ -48,6 +71,7 @@ def build_rewrite_user_prompt(original_prompt: str, lang: str) -> str:
         Language-specific rule:
         - for Wenyan, use it only when it does not reduce technical precision or
           implementation clarity
+        {conservative_block}
 
         ORIGINAL_PROMPT:
         <<<PROMPT

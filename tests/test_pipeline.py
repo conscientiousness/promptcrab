@@ -1,5 +1,5 @@
 from promptcrab.models import Candidate, PipelineConfig
-from promptcrab.pipeline import _evaluate_candidate, choose_best, run_pipeline
+from promptcrab.pipeline import _evaluate_candidate, choose_best, judge_candidate, run_pipeline
 
 
 def test_choose_best_prefers_smallest_valid_candidate() -> None:
@@ -85,6 +85,30 @@ class DummyJudgeBackend:
         )
 
 
+class FlakyJudgeBackend:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def generate(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        json_schema=None,
+        max_output_tokens=None,
+        timeout: int = 300,
+    ):
+        self.calls += 1
+        if self.calls == 1:
+            return '{"faithful": true, "same_task_count": true', {}
+        return (
+            '{"faithful": true, "same_task_count": true, "same_order": true, '
+            '"missing_literals": [], "missing_constraints": [], "added_info": [], '
+            '"ambiguities": [], "notes": []}',
+            {},
+        )
+
+
 def test_evaluate_candidate_strips_outer_code_fences_and_uses_judge_backend() -> None:
     rewrite_backend = DummyRewriteBackend()
     judge_backend = DummyJudgeBackend()
@@ -94,8 +118,8 @@ def test_evaluate_candidate_strips_outer_code_fences_and_uses_judge_backend() ->
         original_prompt="original",
         lang="zh",
         timeout=1,
-        token_timeout=1,
         max_output_tokens=999,
+        token_counter=lambda text: (len(text), "dummy"),
     )
 
     assert candidate.text == "rewritten"
@@ -113,13 +137,27 @@ def test_evaluate_candidate_without_judge_uses_literal_check_only() -> None:
         original_prompt="rewritten",
         lang="zh",
         timeout=1,
-        token_timeout=1,
         max_output_tokens=None,
+        token_counter=lambda text: (len(text), "dummy"),
     )
 
     assert candidate.text == "rewritten"
     assert candidate.verifier == {}
     assert candidate.valid is True
+
+
+def test_judge_candidate_retries_when_judge_returns_invalid_json() -> None:
+    backend = FlakyJudgeBackend()
+
+    verifier = judge_candidate(
+        judge_backend=backend,
+        original_prompt="original",
+        candidate_text="candidate",
+        timeout=1,
+    )
+
+    assert backend.calls == 2
+    assert verifier["faithful"] is True
 
 
 def test_run_pipeline_uses_distinct_codex_reasoning_effort_for_judge(monkeypatch) -> None:

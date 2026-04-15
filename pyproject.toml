@@ -29,6 +29,7 @@ Changelog = "https://github.com/conscientiousness/promptcrab/blob/main/CHANGELOG
 
 [project.scripts]
 promptcrab = "promptcrab.cli:main"
+promptcrab-benchmark = "promptcrab.benchmark:main"
 
 [dependency-groups]
 dev = [

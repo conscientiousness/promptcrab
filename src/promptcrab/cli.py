@@ -33,12 +33,12 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--backend",
         required=True,
-        choices=["minimax", "gemini", "gemini_cli", "codex_cli"],
+        choices=["minimax", "gemini", "gemini_cli", "codex_cli", "opencode_cli"],
     )
     parser.add_argument("--model", required=True, help="Model name for the selected backend.")
     parser.add_argument(
         "--judge-backend",
-        choices=["minimax", "gemini", "gemini_cli", "codex_cli"],
+        choices=["minimax", "gemini", "gemini_cli", "codex_cli", "opencode_cli"],
         help=(
             "Optional backend used only for verification/judging. If omitted, promptcrab "
             "skips judge-based verification."
@@ -99,6 +99,7 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--gemini-api-key", help="Overrides GEMINI_API_KEY for Gemini.")
     parser.add_argument("--gemini-executable", default="gemini")
     parser.add_argument("--codex-executable", default="codex")
+    parser.add_argument("--opencode-executable", default="opencode")
     parser.add_argument(
         "--codex-reasoning-effort",
         choices=CODEX_REASONING_EFFORT_CHOICES,
@@ -144,6 +145,7 @@ def build_config(args: argparse.Namespace) -> PipelineConfig:
         gemini_api_key=args.gemini_api_key,
         gemini_executable=args.gemini_executable,
         codex_executable=args.codex_executable,
+        opencode_executable=args.opencode_executable,
         codex_reasoning_effort=args.codex_reasoning_effort,
         judge_codex_reasoning_effort=args.judge_codex_reasoning_effort,
     )

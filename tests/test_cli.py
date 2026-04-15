@@ -26,6 +26,7 @@ def make_args(**overrides: object) -> Namespace:
         "gemini_api_key": None,
         "gemini_executable": "gemini",
         "codex_executable": "codex",
+        "opencode_executable": "opencode",
         "codex_reasoning_effort": None,
         "judge_codex_reasoning_effort": None,
     }

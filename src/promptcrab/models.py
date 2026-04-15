@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-BackendName = Literal["minimax", "gemini", "gemini_cli", "codex_cli"]
+BackendName = Literal["minimax", "gemini", "gemini_cli", "codex_cli", "opencode_cli"]
 
 
 @dataclass(slots=True)
@@ -52,6 +52,7 @@ class PipelineConfig:
     gemini_api_key: str | None = None
     gemini_executable: str = "gemini"
     codex_executable: str = "codex"
+    opencode_executable: str = "opencode"
     codex_reasoning_effort: str | None = None
     judge_codex_reasoning_effort: str | None = None
 
@@ -72,6 +73,7 @@ class PipelineResult:
     fallback_to_original: bool
     fallback_reasons: list[str]
     generated_at_unix: int
+    prompt_risk: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -89,4 +91,5 @@ class PipelineResult:
             "fallback_to_original": self.fallback_to_original,
             "fallback_reasons": self.fallback_reasons,
             "generated_at_unix": self.generated_at_unix,
+            "prompt_risk": self.prompt_risk,
         }

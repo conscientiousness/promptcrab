@@ -90,21 +90,21 @@ promptcrab --env-file ~/.config/promptcrab/provider.env --help
 
 ## 快速開始
 
-用 MiniMax 改寫 prompt：
+透過 opencode 使用 MiniMax 改寫 prompt：
 
 ```bash
 promptcrab \
-  --backend minimax \
-  --model MiniMax-M2.7 \
+  --backend opencode_cli \
+  --model minimax-coding-plan/MiniMax-M2.7-highspeed \
   --prompt "Summarize this API design and keep every field name unchanged."
 ```
 
-從檔案讀 prompt：
+用本機 Gemini CLI 從檔案讀 prompt：
 
 ```bash
 promptcrab \
-  --backend gemini \
-  --model gemini-3.1-pro-preview \
+  --backend gemini_cli \
+  --model gemini-3-flash-preview \
   --prompt-file ./prompt.txt
 ```
 
@@ -112,10 +112,11 @@ promptcrab \
 
 ```bash
 promptcrab \
-  --backend minimax \
-  --model MiniMax-M2.7-highspeed \
+  --backend opencode_cli \
+  --model minimax-coding-plan/MiniMax-M2.7-highspeed \
   --judge-backend codex_cli \
   --judge-model gpt-5.4 \
+  --judge-codex-reasoning-effort medium \
   --prompt-file ./prompt.txt
 ```
 
@@ -124,7 +125,7 @@ promptcrab \
 ```bash
 promptcrab \
   --backend gemini_cli \
-  --model gemini-2.5-flash \
+  --model gemini-3-flash-preview \
   --prompt-file ./prompt.txt
 ```
 
@@ -140,8 +141,8 @@ cat ./prompt.txt | promptcrab --backend codex_cli --model gpt-5.4
 
 ```bash
 promptcrab \
-  --backend minimax \
-  --model MiniMax-M2.7 \
+  --backend opencode_cli \
+  --model minimax-coding-plan/MiniMax-M2.7-highspeed \
   --prompt-file ./prompt.txt \
   --show-all
 ```
@@ -150,8 +151,8 @@ promptcrab \
 
 ```bash
 promptcrab \
-  --backend gemini \
-  --model gemini-3.1-pro-preview \
+  --backend gemini_cli \
+  --model gemini-3-flash-preview \
   --prompt-file ./prompt.txt \
   --json-output
 ```
@@ -160,8 +161,8 @@ promptcrab \
 
 ```bash
 promptcrab \
-  --backend minimax \
-  --model MiniMax-M2.7 \
+  --backend opencode_cli \
+  --model minimax-coding-plan/MiniMax-M2.7-highspeed \
   --prompt-file ./prompt.txt \
   --write-best-to ./optimized.txt
 ```
@@ -171,7 +172,7 @@ promptcrab \
 ```bash
 promptcrab \
   --backend gemini \
-  --model gemini-3.1-pro-preview \
+  --model gemini-3-flash-preview \
   --prompt-file ./prompt.txt \
   --max-output-tokens 4096
 ```
@@ -188,20 +189,76 @@ promptcrab \
 
 ## 目前模型建議
 
-目前內部 benchmark 還很小，應視為方向性參考，不是最終結論。
-以下數據來自 2 組 prompt sample，並由兩個外部 judge backend 評分，token 也用同一個 tokenizer 重新計算。
+與其在 README 內維護容易過時的小樣本靜態表格，現在建議直接用 `promptcrab-benchmark` 重跑 benchmark。它會跑內建 literal / format hard-case suite、抓公開網路資料集、使用共享 tokenizer 重新計 token，並用多個外部 judge 做 panel 評估。
 
-| Rewrite Backend | 建議用途 | Cross-Judge Pass Rate | Consensus Pass Rate | Avg Best Token Reduction |
-|---|---|---:|---:|---:|
-| `codex_cli` + `gpt-5.4` | 最穩的通用 rewrite | `100.0%` | `100.0%` | `11.1%` |
-| `minimax` + `MiniMax-M2.7-highspeed` | 壓縮力最強，建議搭配外部 judge | `75.0%` | `50.0%` | `18.7%` |
-| `gemini_cli` + `gemini-3.1-pro-preview` | 偏實驗性，目前 cross-judge agreement 較弱 | `50.0%` | `0.0%` | `12.1%` |
+### 方向性快照
+
+這個單 judge 快照在 2026-04-15 跑出，目標是提供一個能快速完成、適合放在 README 的比較表。設定是 MT-Bench 抽 4 題、IFEval 抽 4 題，合計 8 題；共享 tokenizer 使用 `o200k_base`；保留 literal checks；所有列都用 `codex_cli + gpt-5.4 (medium)` 當 judge。請把它視為方向性參考，不是最終排名；其中 GPT 列是 self-judged。
+
+`通過案例平均 token reduction` 只計算至少有一個候選通過 fidelity gates 的案例。
+
+| Rewrite backend | Judge | Sample | Pass rate (95% CI) | 通過案例平均 token reduction (95% CI) | Dataset pass split | 備註 |
+|---|---|---:|---:|---:|---|---|
+| `codex_cli + gpt-5.4 (medium)` | `codex_cli + gpt-5.4 (medium)` | `8` | `6/8 = 75.0%` (`40.9-92.9%`) | `4.8%` (`-5.5-12.3%`) | MT-Bench `4/4`, IFEval `2/4` | Self-judged；壓縮最保守。IFEval 失敗主因是嚴格 literal / verbatim 約束。 |
+| `opencode_cli + MiniMax-M2.7-highspeed` | `codex_cli + gpt-5.4 (medium)` | `8` | `2/8 = 25.0%` (`7.1-59.1%`) | `20.1%` (`19.2-20.9%`) | MT-Bench `2/4`, IFEval `0/4` | 通過案例壓縮最多，但多個 IFEval case 因 literal 或格式漂移失敗。 |
+| `gemini_cli + gemini-3-flash-preview` | `codex_cli + gpt-5.4 (medium)` | `8` | `4/8 = 50.0%` (`21.5-78.5%`) | `7.8%` (`-16.7-26.3%`) | MT-Bench `3/4`, IFEval `1/4` | fidelity 居中；失敗多來自翻譯或刪減 literal constraints。 |
+
+內建案例來源：
+
+- `hard_cases`：內建 literal 與格式保留測資，涵蓋逐字重複、bullet template、精確 marker、段落 separator、大小寫 / 數量約束、符號、JSON keys 與 URL
+- [MT-Bench](https://raw.githubusercontent.com/lm-sys/FastChat/main/fastchat/llm_judge/data/mt_bench/question.jsonl)
+- [IFEval](https://raw.githubusercontent.com/google-research/google-research/master/instruction_following_eval/data/input_data.jsonl)
+
+這個 benchmark 會提供：
+
+- 每個 judge 的 pass rate 與 95% Wilson confidence interval
+- 多 judge 共識 pass rate
+- gate 前 token reduction，用來看最短 raw candidate 在 fidelity 檢查前壓縮多少
+- gate 後 token reduction，用來看通過 literal 與 judge gates 後的可接受壓縮量
+- 平均 token reduction 的 95% bootstrap confidence interval
+- judge 兩兩 agreement 與 Cohen's kappa
+- 分資料集拆解結果
+
+範例：用 hard cases 與公開真實案例重跑 benchmark
+
+```bash
+promptcrab-benchmark \
+  --backend codex_cli \
+  --model gpt-5.4 \
+  --codex-reasoning-effort medium \
+  --judge gemini_cli:gemini-3-flash-preview \
+  --judge opencode_cli:minimax-coding-plan/MiniMax-M2.7-highspeed \
+  --dataset hard_cases \
+  --dataset mt_bench \
+  --dataset ifeval \
+  --cases-per-dataset 24 \
+  --trials 2 \
+  --tokenizer o200k_base
+```
+
+如果你想跑完整資料集，而不是抽樣：
+
+```bash
+promptcrab-benchmark \
+  --backend codex_cli \
+  --model gpt-5.4 \
+  --codex-reasoning-effort medium \
+  --judge gemini_cli:gemini-3-flash-preview \
+  --judge opencode_cli:minimax-coding-plan/MiniMax-M2.7-highspeed \
+  --dataset hard_cases \
+  --dataset mt_bench \
+  --dataset ifeval \
+  --cases-per-dataset 0 \
+  --tokenizer o200k_base
+```
+
+選取 `hard_cases` 時會固定跑完整內建 suite；`--cases-per-dataset` 只限制外部資料集抽樣數。
 
 建議起手式：
 
-- 若重視 fidelity 與穩定性，使用 `codex_cli --model gpt-5.4`，必要時加上 `--codex-reasoning-effort medium|high|xhigh`，並搭配不同的 judge backend，例如 `gemini_cli` 或 `minimax`
-- 若重視壓縮能力，使用 `minimax --model MiniMax-M2.7-highspeed`，並用 `codex_cli --model gpt-5.4` 當 judge
-- `gemini_cli --model gemini-3.1-pro-preview` 目前較適合作為比較用 rewrite backend，不建議當預設首選
+- 若重視 fidelity 與穩定性，使用 `codex_cli --model gpt-5.4`，必要時加上 `--codex-reasoning-effort medium|high|xhigh`，並搭配不同的 judge backend，例如 `gemini_cli` 或 `opencode_cli`
+- 若重視壓縮能力，可以比較 `opencode_cli --model minimax-coding-plan/MiniMax-M2.7-highspeed`，並用 `codex_cli --model gpt-5.4` 當 judge
+- `gemini_cli --model gemini-3-flash-preview` 目前較適合作為比較用 rewrite backend；在上方方向性快照中，literal fidelity 弱於 `gpt-5.4`
 
 如果省略 `--judge-backend`，`promptcrab` 會跳過 judge-based verification，只保留 literal checks。速度會更快，但安全性較低。
 
@@ -213,7 +270,7 @@ promptcrab \
   --model gpt-5.4 \
   --codex-reasoning-effort medium \
   --judge-backend gemini_cli \
-  --judge-model gemini-3.1-pro-preview \
+  --judge-model gemini-3-flash-preview \
   --prompt-file ./prompt.txt
 ```
 
@@ -221,8 +278,8 @@ promptcrab \
 
 ```bash
 promptcrab \
-  --backend minimax \
-  --model MiniMax-M2.7-highspeed \
+  --backend opencode_cli \
+  --model minimax-coding-plan/MiniMax-M2.7-highspeed \
   --judge-backend codex_cli \
   --judge-model gpt-5.4 \
   --judge-codex-reasoning-effort medium \

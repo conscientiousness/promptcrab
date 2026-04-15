@@ -55,6 +55,34 @@ def extract_gemini_cli_result(stdout: str) -> tuple[str, dict[str, Any]]:
     raise PipelineError(f"Could not parse Gemini CLI JSON response:\n{stdout}")
 
 
+def extract_opencode_result(stdout: str) -> tuple[str, dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    text_parts: list[str] = []
+
+    for line in stdout.splitlines():
+        cleaned = line.strip()
+        if not cleaned:
+            continue
+        try:
+            payload = json.loads(cleaned)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        events.append(payload)
+        if payload.get("type") != "text":
+            continue
+        part = payload.get("part")
+        if isinstance(part, dict):
+            text = part.get("text")
+            if isinstance(text, str):
+                text_parts.append(text)
+
+    if not events:
+        raise PipelineError(f"Could not parse OpenCode CLI JSON response:\n{stdout}")
+    return "\n".join(text_parts).strip(), {"events": events}
+
+
 def gemini_extract_text(response: dict[str, Any]) -> str:
     pieces: list[str] = []
     for candidate in response.get("candidates", []) or []:

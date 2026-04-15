@@ -7,6 +7,7 @@ from promptcrab.backends import (
     GeminiBackend,
     GeminiCLIBackend,
     MiniMaxBackend,
+    OpenCodeCLIBackend,
 )
 from promptcrab.errors import PipelineError
 
@@ -206,3 +207,42 @@ def test_codex_generate_passes_reasoning_effort_override(monkeypatch) -> None:
     assert text == "rewritten"
     assert "-c" in captured["cmd"]
     assert 'model_reasoning_effort="medium"' in captured["cmd"]
+
+
+def test_opencode_generate_parses_json_events(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_run_subprocess(
+        cmd: list[str],
+        input_text: str | None,
+        timeout: int,
+        env: dict[str, str] | None = None,
+    ) -> tuple[str, str]:
+        captured["cmd"] = cmd
+        captured["input_text"] = input_text
+        return (
+            '{"type":"step_start"}\n'
+            '{"type":"text","part":{"text":"rewritten"}}\n'
+            '{"type":"step_finish"}',
+            "",
+        )
+
+    monkeypatch.setattr("promptcrab.backends.shutil.which", lambda executable: "/usr/bin/opencode")
+    monkeypatch.setattr("promptcrab.backends.run_subprocess", fake_run_subprocess)
+    backend = OpenCodeCLIBackend(
+        model="minimax-coding-plan/MiniMax-M2.7-highspeed",
+        executable="opencode",
+    )
+
+    text, meta = backend.generate(system_prompt="system", user_prompt="user")
+
+    assert text == "rewritten"
+    assert meta["raw"]["events"][1]["type"] == "text"
+    assert captured["cmd"][:5] == [
+        "opencode",
+        "run",
+        "-m",
+        "minimax-coding-plan/MiniMax-M2.7-highspeed",
+        "--format",
+    ]
+    assert captured["input_text"] is None
