@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 - No unreleased changes yet.
 
+## [2026.4.23] - 2026-04-23
+
+- No user-facing changes were recorded for this release.
+
 ## [2026.4.15] - 2026-04-15
 
 ### Added
