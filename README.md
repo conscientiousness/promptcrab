@@ -22,7 +22,7 @@
 
 `promptcrab` is a CLI for rewriting prompts for downstream LLMs with quality-first copy editing, safer structure, lower token cost, and strict fidelity checks.
 
-Instead of simply shortening text, it first creates a same-language canonical rewrite that makes the prompt clearer and easier for another LLM to execute. It then derives translated/compact candidates from that cleaner source, verifies them against the original prompt, checks protected literals such as URLs, IDs, keys, and numbers, and returns the safest compact version.
+Instead of simply shortening text, it first creates a same-language canonical rewrite that makes the prompt clearer and easier for another LLM to execute. It then derives translated/compact candidates from that cleaner source, uses prompt constraints and optional judge verification to preserve important details such as URLs, IDs, keys, and numbers, and returns the safest compact version.
 
 Requires Python 3.12 or newer.
 
@@ -31,7 +31,7 @@ Requires Python 3.12 or newer.
 - First rewrites the original prompt into a clearer same-language `canonical` candidate
 - Derives clearer, more actionable `zh`, `wenyan`, and `en` candidates from that canonical source
 - Optionally verifies each candidate with a dedicated judge backend
-- Checks whether important literals were dropped
+- Constrains rewrites to preserve important literals and constraints
 - Estimates token counts
 - Picks the best valid candidate, prioritizing fidelity and clarity before token savings
 
@@ -204,7 +204,7 @@ Instead of checking in a small, stale benchmark table, `promptcrab` now ships a 
 
 ### Directional Snapshot
 
-This single-judge snapshot was run on 2026-04-15 for a README-sized comparison that finishes quickly. It samples 4 MT-Bench cases and 4 IFEval cases, uses `o200k_base` as the shared tokenizer, keeps literal checks enabled, and evaluates every row with `codex_cli + gpt-5.4 (medium)` as the judge. Treat it as directional, not a final ranking; the GPT row is self-judged.
+This single-judge snapshot was run on 2026-04-15 for a README-sized comparison that finishes quickly. It samples 4 MT-Bench cases and 4 IFEval cases, uses `o200k_base` as the shared tokenizer, keeps verifier prompts strict about literals, and evaluates every row with `codex_cli + gpt-5.4 (medium)` as the judge. Treat it as directional, not a final ranking; the GPT row is self-judged.
 
 `Avg accepted token reduction` is computed only over cases where at least one candidate passed the fidelity gates.
 
@@ -225,7 +225,7 @@ The benchmark reports:
 - per-judge pass rate with 95% Wilson confidence intervals
 - panel consensus pass rate
 - before-gate token reduction, showing how much the raw shortest candidate compressed before fidelity checks
-- after-gate token reduction, showing accepted compression after literal and judge gates
+- after-gate token reduction, showing accepted compression after fidelity checks
 - 95% bootstrap confidence intervals for mean token reduction
 - pairwise judge agreement and Cohen's kappa
 - per-dataset breakdowns
@@ -271,7 +271,7 @@ Recommended starting points:
 - For strongest prompt compression, compare `opencode_cli --model minimax-coding-plan/MiniMax-M2.7-highspeed` with `codex_cli --model gpt-5.4` as judge.
 - Use `gemini_cli --model gemini-3-flash-preview` as a rewrite backend only if you want to compare it explicitly; current literal-fidelity performance is weaker than `gpt-5.4` in the directional snapshot above.
 
-If you omit `--judge-backend`, promptcrab skips judge-based verification and only applies literal checks. This is faster, but less safe.
+If you omit `--judge-backend`, promptcrab skips semantic and literal fidelity verification. This is faster, but it relies on rewrite prompt constraints plus local language-shape checks.
 
 Example: safer default rewrite
 
@@ -311,8 +311,8 @@ For `codex_cli`, promptcrab can override reasoning effort with `--codex-reasonin
 - If no candidate passes the fidelity gates, `promptcrab` returns the original prompt unchanged.
 - In normal mode, promptcrab generates a `canonical` candidate first, then generates translated candidates from it. Translated candidates do not silently switch back to the original prompt as their source.
 - The `wenyan` candidate is strict Wenyan; it is not allowed to return modern Chinese under the `wenyan` label.
-- If you set `--judge-backend`, promptcrab generates translated language candidates in parallel, skips judge calls for literal-invalid candidates, and judges the cheapest surviving candidate first before expanding to the rest.
-- If you omit `--judge-backend`, promptcrab skips semantic verification and only uses literal checks.
+- If you set `--judge-backend`, promptcrab generates translated language candidates in parallel, skips judge calls for locally invalid candidates such as wrong `wenyan` language shape, and judges the cheapest surviving candidate first before expanding to the rest.
+- If you omit `--judge-backend`, promptcrab skips semantic and literal fidelity verification and relies on rewrite prompt constraints plus local language-shape checks.
 - If you want a truly independent judge, set `--judge-backend` to a different backend than `--backend`.
 - `promptcrab` does not set a generation output cap by default; if you need one for a specific backend or model, pass `--max-output-tokens`.
 - `--max-output-tokens` is currently forwarded to `minimax` and `gemini`; `codex_cli` and `gemini_cli` do not expose a matching flag in this wrapper yet.

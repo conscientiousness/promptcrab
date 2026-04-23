@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
@@ -15,7 +16,6 @@ from promptcrab.constants import (
     VERIFIER_SYSTEM,
 )
 from promptcrab.errors import PipelineError
-from promptcrab.literal_checks import literal_coverage
 from promptcrab.models import Candidate, PipelineConfig, PipelineResult
 from promptcrab.parsing import parse_json_response, strip_code_fences
 from promptcrab.preflight import PromptRisk, classify_prompt
@@ -78,8 +78,6 @@ def choose_best(
     reasons: list[str] = []
     for candidate in candidates:
         reason = f"{candidate.lang}: invalid"
-        if candidate.literal_check and not candidate.literal_check.get("ok", False):
-            reason += f"; missing literals={candidate.literal_check.get('missing', {})}"
         if candidate.verifier:
             reason += f"; faithful={candidate.verifier.get('faithful')}"
             if candidate.verifier.get("ambiguities"):
@@ -297,10 +295,11 @@ def evaluate_candidates(
             candidate.valid = is_candidate_valid(candidate)
         return
 
-    eligible = [candidate for candidate in candidates if candidate.literal_check.get("ok")]
+    eligible = [candidate for candidate in candidates if is_candidate_valid(candidate)]
     if not eligible:
         return
 
+    verifier_cache: dict[str, dict[str, Any]] = {}
     sorted_candidates = sorted(eligible, key=candidate_sort_key)
     first_group_size = _first_token_group_size(sorted_candidates)
 
@@ -309,6 +308,7 @@ def evaluate_candidates(
         judge_backend=judge_backend,
         original_prompt=original_prompt,
         timeout=timeout,
+        verifier_cache=verifier_cache,
     )
     if any(candidate.valid for candidate in sorted_candidates[:first_group_size]):
         return
@@ -318,6 +318,7 @@ def evaluate_candidates(
         judge_backend=judge_backend,
         original_prompt=original_prompt,
         timeout=timeout,
+        verifier_cache=verifier_cache,
     )
 
 
@@ -343,36 +344,71 @@ def _judge_candidate_batch(
     judge_backend,
     original_prompt: str,
     timeout: int,
+    verifier_cache: dict[str, dict[str, Any]],
 ) -> None:
     if not candidates:
         return
     if len(candidates) == 1:
         candidate = candidates[0]
-        verifier = judge_candidate(
+        verifier = _judge_candidate_cached(
+            candidate.text,
             judge_backend=judge_backend,
             original_prompt=original_prompt,
-            candidate_text=candidate.text,
             timeout=timeout,
+            verifier_cache=verifier_cache,
         )
         candidate.verifier = verifier
         candidate.valid = is_candidate_valid(candidate)
         return
 
-    futures: dict[Future[dict[str, Any]], Candidate] = {}
-    with ThreadPoolExecutor(max_workers=min(len(candidates), MAX_PARALLEL_WORKERS)) as executor:
-        for candidate in candidates:
+    pending_by_text: dict[str, list[Candidate]] = {}
+    for candidate in candidates:
+        if candidate.text in verifier_cache:
+            candidate.verifier = copy.deepcopy(verifier_cache[candidate.text])
+            candidate.valid = is_candidate_valid(candidate)
+        else:
+            pending_by_text.setdefault(candidate.text, []).append(candidate)
+    if not pending_by_text:
+        return
+
+    futures: dict[Future[dict[str, Any]], str] = {}
+    with ThreadPoolExecutor(
+        max_workers=min(len(pending_by_text), MAX_PARALLEL_WORKERS)
+    ) as executor:
+        for candidate_text in pending_by_text:
             future = executor.submit(
                 judge_candidate,
                 judge_backend=judge_backend,
                 original_prompt=original_prompt,
-                candidate_text=candidate.text,
+                candidate_text=candidate_text,
                 timeout=timeout,
             )
-            futures[future] = candidate
+            futures[future] = candidate_text
         for future in as_completed(futures):
-            candidate = futures[future]
-            candidate.verifier = future.result()
-            candidate.valid = is_candidate_valid(candidate)
+            candidate_text = futures[future]
+            verifier = future.result()
+            verifier_cache[candidate_text] = verifier
+            for candidate in pending_by_text[candidate_text]:
+                candidate.verifier = copy.deepcopy(verifier)
+                candidate.valid = is_candidate_valid(candidate)
+
+
+def _judge_candidate_cached(
+    candidate_text: str,
+    *,
+    judge_backend,
+    original_prompt: str,
+    timeout: int,
+    verifier_cache: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    if candidate_text not in verifier_cache:
+        verifier_cache[candidate_text] = judge_candidate(
+            judge_backend=judge_backend,
+            original_prompt=original_prompt,
+            candidate_text=candidate_text,
+            timeout=timeout,
+        )
+    return copy.deepcopy(verifier_cache[candidate_text])
 
 
 def build_backend_token_counter(backend, *, token_timeout: int) -> TokenCounter:
@@ -464,7 +500,6 @@ def generate_candidate(
     candidate.generation_meta["language_check"] = language_check
     if not language_check["ok"]:
         candidate.warnings.append(str(language_check["reason"]))
-    candidate.literal_check = literal_coverage(original_prompt, candidate.text)
     if token_counter is not None:
         count, count_source = token_counter(candidate.text)
         candidate.token_count = count
@@ -522,10 +557,9 @@ def is_candidate_valid(candidate: Candidate, *, verifier: dict[str, Any] | None 
     if isinstance(language_check, dict) and language_check.get("ok") is False:
         return False
     if not verifier_payload:
-        return bool(candidate.literal_check.get("ok"))
+        return True
     return bool(
-        candidate.literal_check.get("ok")
-        and verifier_payload.get("faithful") is True
+        verifier_payload.get("faithful") is True
         and verifier_payload.get("same_task_count") is True
         and verifier_payload.get("same_order") is True
         and not verifier_payload.get("added_info")

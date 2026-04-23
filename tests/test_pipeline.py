@@ -8,6 +8,7 @@ from promptcrab.models import Candidate, PipelineConfig
 from promptcrab.pipeline import (
     _evaluate_candidate,
     choose_best,
+    evaluate_candidates,
     generate_candidates,
     is_candidate_valid,
     judge_candidate,
@@ -46,14 +47,13 @@ def test_choose_best_falls_back_to_original_when_all_invalid() -> None:
         token_count=5,
         valid=False,
         verifier={"faithful": False},
-        literal_check={"ok": False, "missing": {"numbers": ["42"]}},
     )
 
     best_text, best_candidate, reasons = choose_best([invalid], "original")
 
     assert best_text == "original"
     assert best_candidate is None
-    assert reasons == ["zh: invalid; missing literals={'numbers': ['42']}; faithful=False"]
+    assert reasons == ["zh: invalid; faithful=False"]
 
 
 def test_choose_best_reports_judge_ambiguities_when_invalid() -> None:
@@ -62,7 +62,6 @@ def test_choose_best_reports_judge_ambiguities_when_invalid() -> None:
         text="candidate",
         token_count=5,
         valid=False,
-        literal_check={"ok": True, "missing": {}},
         verifier={
             "faithful": True,
             "same_task_count": True,
@@ -87,7 +86,6 @@ def test_candidate_with_judge_ambiguities_is_invalid() -> None:
     candidate = Candidate(
         lang="zh",
         text="candidate",
-        literal_check={"ok": True, "missing": {}},
         verifier={
             "faithful": True,
             "same_task_count": True,
@@ -110,7 +108,6 @@ def test_wenyan_candidate_with_modern_chinese_markers_is_invalid() -> None:
     candidate = Candidate(
         lang="wenyan",
         text="你必須分析不同換股特性或投資組合檔數對策略表現的影響，例如月初換股。",
-        literal_check={"ok": True, "missing": {}},
         generation_meta={"language_check": check},
     )
 
@@ -171,8 +168,7 @@ def test_generate_candidates_uses_canonical_prompt_as_translation_source() -> No
     assert "Fix the thing 42" in backend.user_prompts[2]
 
 
-def test_generate_candidates_does_not_fallback_to_original_when_canonical_is_literal_invalid(
-) -> None:
+def test_generate_candidates_does_not_fallback_to_original_when_canonical_changes_text() -> None:
     class SourceTrackingBackend:
         def __init__(self) -> None:
             self.user_prompts: list[str] = []
@@ -206,7 +202,6 @@ def test_generate_candidates_does_not_fallback_to_original_when_canonical_is_lit
     )
 
     assert [candidate.lang for candidate in candidates] == [CANONICAL_LANGUAGE, "zh"]
-    assert candidates[0].literal_check["ok"] is False
     assert "Fix teh thing 42" in backend.user_prompts[0]
     assert "Fix the thing" in backend.user_prompts[1]
     assert "Fix teh thing 42" not in backend.user_prompts[1]
@@ -299,7 +294,7 @@ def test_evaluate_candidate_strips_outer_code_fences_and_uses_judge_backend() ->
     assert judge_backend.last_max_output_tokens is None
 
 
-def test_evaluate_candidate_without_judge_uses_literal_check_only() -> None:
+def test_evaluate_candidate_without_judge_accepts_local_valid_candidate() -> None:
     rewrite_backend = DummyRewriteBackend()
 
     candidate = _evaluate_candidate(
@@ -497,7 +492,7 @@ def test_run_pipeline_generates_language_candidates_in_parallel(monkeypatch) -> 
     assert all(candidate.valid for candidate in result.candidates)
 
 
-def test_run_pipeline_skips_judging_literal_invalid_candidates_and_stops_after_best(
+def test_run_pipeline_stops_judging_after_best_candidate_passes(
     monkeypatch,
 ) -> None:
     class FakeRewriteBackend:
@@ -523,7 +518,7 @@ def test_run_pipeline_skips_judging_literal_invalid_candidates_and_stops_after_b
                 return "keep 42", {}
             if user_prompt.startswith("Rewrite the ORIGINAL_PROMPT into Classical Chinese"):
                 return "long keep 42", {}
-            return "drop", {}
+            return "very long keep 42", {}
 
         def count_text_tokens(self, text: str, timeout: int = 120):
             return len(text), "backend-native"
@@ -580,5 +575,113 @@ def test_run_pipeline_skips_judging_literal_invalid_candidates_and_stops_after_b
     assert result.candidates[1].valid is True
     assert result.candidates[2].verifier == {}
     assert result.candidates[3].verifier == {}
-    assert result.candidates[3].literal_check["ok"] is False
     assert "canonical keep 42" in rewrite_backend.user_prompts[1]
+
+
+def test_run_pipeline_skips_judging_language_invalid_candidates(monkeypatch) -> None:
+    class FakeRewriteBackend:
+        name = "rewrite"
+        model = "rewrite-model"
+
+        def generate(
+            self,
+            *,
+            system_prompt: str,
+            user_prompt: str,
+            json_schema=None,
+            max_output_tokens=None,
+            timeout: int = 300,
+        ):
+            del system_prompt, json_schema, max_output_tokens, timeout
+            if user_prompt.startswith("Rewrite the ORIGINAL_PROMPT into the original language"):
+                return "canonical keep 42", {}
+            if user_prompt.startswith("Rewrite the ORIGINAL_PROMPT into modern Chinese."):
+                return "valid keep 42", {}
+            if user_prompt.startswith("Rewrite the ORIGINAL_PROMPT into Classical Chinese"):
+                return "你必須42", {}
+            return "valid keep 42 but longer", {}
+
+        def count_text_tokens(self, text: str, timeout: int = 120):
+            del timeout
+            return len(text), "backend-native"
+
+    class FakeJudgeBackend:
+        name = "judge"
+        model = "judge-model"
+
+        def __init__(self) -> None:
+            self.seen_candidates: list[str] = []
+
+        def generate(
+            self,
+            *,
+            system_prompt: str,
+            user_prompt: str,
+            json_schema=None,
+            max_output_tokens=None,
+            timeout: int = 300,
+        ):
+            del system_prompt, json_schema, max_output_tokens, timeout
+            self.seen_candidates.append(user_prompt)
+            return (
+                '{"faithful": true, "same_task_count": true, "same_order": true, '
+                '"missing_literals": [], "missing_constraints": [], "added_info": [], '
+                '"ambiguities": [], "notes": []}',
+                {},
+            )
+
+    rewrite_backend = FakeRewriteBackend()
+    judge_backend = FakeJudgeBackend()
+
+    def fake_build_backend(config: PipelineConfig):
+        if config.model == "judge-model":
+            return judge_backend
+        return rewrite_backend
+
+    monkeypatch.setattr("promptcrab.pipeline.build_backend", fake_build_backend)
+
+    result = run_pipeline(
+        PipelineConfig(
+            backend="codex_cli",
+            model="rewrite-model",
+            prompt="keep 42",
+            judge_backend="codex_cli",
+            judge_model="judge-model",
+            tokenizer=None,
+        )
+    )
+
+    assert result.best_lang == "zh"
+    assert len(judge_backend.seen_candidates) == 1
+    assert "valid keep 42" in judge_backend.seen_candidates[0]
+    assert "你必須42" not in judge_backend.seen_candidates[0]
+    assert result.candidates[2].lang == "wenyan"
+    assert result.candidates[2].valid is False
+    assert result.candidates[2].verifier == {}
+
+
+def test_evaluate_candidates_reuses_judge_result_for_duplicate_candidate_text() -> None:
+    candidates = [
+        Candidate(
+            lang="canonical",
+            text="same keep 42",
+            token_count=12,
+        ),
+        Candidate(
+            lang="zh",
+            text="same keep 42",
+            token_count=12,
+        ),
+    ]
+    judge_backend = DummyJudgeBackend()
+
+    evaluate_candidates(
+        candidates=candidates,
+        judge_backend=judge_backend,
+        original_prompt="keep 42",
+        timeout=1,
+    )
+
+    assert judge_backend.calls == 1
+    assert all(candidate.valid for candidate in candidates)
+    assert all(candidate.verifier["faithful"] is True for candidate in candidates)

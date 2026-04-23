@@ -718,7 +718,6 @@ def serialize_benchmark_candidate(
         "text": candidate.text,
         "token_count": candidate.token_count,
         "token_count_source": candidate.token_count_source,
-        "literal_check": candidate.literal_check,
         "judges": judgments,
     }
 

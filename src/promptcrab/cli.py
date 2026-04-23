@@ -138,8 +138,14 @@ def read_prompt(prompt: str | None, prompt_file: str | None) -> str:
 def build_config(args: argparse.Namespace) -> PipelineConfig:
     if args.max_output_tokens is not None and args.max_output_tokens <= 0:
         raise PipelineError("--max-output-tokens must be a positive integer.")
+    if args.judge_backend and not args.judge_model:
+        raise PipelineError("--judge-backend requires --judge-model.")
     if args.judge_model and not args.judge_backend:
         raise PipelineError("--judge-model requires --judge-backend.")
+    if args.judge_codex_reasoning_effort and not args.judge_backend:
+        raise PipelineError(
+            "--judge-codex-reasoning-effort requires --judge-backend and --judge-model."
+        )
     tokenizer = args.tokenizer.strip()
     if not tokenizer:
         raise PipelineError("--tokenizer must be a non-empty string.")
@@ -227,12 +233,6 @@ def print_human_result(result: PipelineResult, *, show_all: bool) -> None:
                 f"[{candidate.lang}] tokens={candidate.token_count} "
                 f"source={candidate.token_count_source} valid={candidate.valid}"
             )
-            if not candidate.literal_check.get("ok", False):
-                missing_literals = json.dumps(
-                    candidate.literal_check.get("missing", {}),
-                    ensure_ascii=False,
-                )
-                print(f"  missing_literals_python={missing_literals}")
             verifier_view = {
                 key: value for key, value in candidate.verifier.items() if key != "_meta"
             }

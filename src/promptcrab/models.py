@@ -15,7 +15,6 @@ class Candidate:
     text: str
     generation_meta: dict[str, Any] = field(default_factory=dict)
     verifier: dict[str, Any] = field(default_factory=dict)
-    literal_check: dict[str, Any] = field(default_factory=dict)
     token_count: int | None = None
     token_count_source: str = ""
     valid: bool = False
@@ -32,7 +31,6 @@ class Candidate:
             "token_count": self.token_count,
             "token_count_source": self.token_count_source,
             "valid": self.valid,
-            "literal_check": self.literal_check,
             "verifier": {key: value for key, value in self.verifier.items() if key != "_meta"},
         }
 

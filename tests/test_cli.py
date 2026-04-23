@@ -51,6 +51,16 @@ def test_build_config_rejects_judge_model_without_judge_backend() -> None:
         build_config(make_args(judge_model="gpt-5.4"))
 
 
+def test_build_config_rejects_judge_backend_without_judge_model() -> None:
+    with pytest.raises(PipelineError, match="requires --judge-model"):
+        build_config(make_args(judge_backend="codex_cli"))
+
+
+def test_build_config_rejects_judge_codex_effort_without_judge_backend() -> None:
+    with pytest.raises(PipelineError, match="requires --judge-backend and --judge-model"):
+        build_config(make_args(judge_codex_reasoning_effort="medium"))
+
+
 def test_build_config_rejects_non_positive_max_output_tokens() -> None:
     with pytest.raises(PipelineError, match="positive integer"):
         build_config(make_args(max_output_tokens=0))
