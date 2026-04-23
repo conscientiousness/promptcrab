@@ -20,9 +20,10 @@ from promptcrab.cli import CODEX_REASONING_EFFORT_CHOICES, load_environment
 from promptcrab.errors import PipelineError
 from promptcrab.models import BackendName, Candidate, PipelineConfig
 from promptcrab.pipeline import (
+    build_shared_token_counter,
     candidate_sort_key,
     count_original_tokens,
-    generate_candidate,
+    generate_candidates,
     is_candidate_valid,
     judge_candidate,
 )
@@ -352,34 +353,6 @@ def build_runtime_backend(config: BenchmarkConfig, spec: BackendSpec, *, is_judg
         ),
     )
     return build_backend(pipeline_config)
-
-
-def build_shared_token_counter(tokenizer_name: str) -> Callable[[str], tuple[int, str]]:
-    try:
-        import tiktoken
-    except Exception as exc:
-        raise PipelineError("Shared benchmark token counting requires tiktoken.") from exc
-
-    encoding = None
-    source = f"tiktoken:{tokenizer_name}"
-    try:
-        encoding = tiktoken.encoding_for_model(tokenizer_name)
-        source = f"tiktoken_model:{tokenizer_name}"
-    except Exception:
-        try:
-            encoding = tiktoken.get_encoding(tokenizer_name)
-            source = f"tiktoken_encoding:{tokenizer_name}"
-        except Exception as exc:
-            raise PipelineError(
-                f"Unknown tokenizer or model for --tokenizer: {tokenizer_name}"
-            ) from exc
-
-    def _count(text: str) -> tuple[int, str]:
-        return len(encoding.encode(text)), source
-
-    return _count
-
-
 def load_public_cases(config: BenchmarkConfig) -> list[dict[str, Any]]:
     dataset_payload: list[dict[str, Any]] = []
     for offset, dataset_name in enumerate(config.datasets):
@@ -601,18 +574,16 @@ def run_case_once(
         case.prompt,
         token_counter=token_counter,
     )
-    candidates = [
-        generate_candidate(
-            backend=rewrite_backend,
-            original_prompt=case.prompt,
-            lang=lang,
-            timeout=timeout,
-            max_output_tokens=max_output_tokens,
-            token_counter=token_counter,
-            prompt_risk=prompt_risk,
-        )
-        for lang in prompt_risk.languages
-    ]
+    candidates = generate_candidates(
+        backend=rewrite_backend,
+        original_prompt=case.prompt,
+        languages=prompt_risk.languages,
+        prompt_risk=prompt_risk,
+        timeout=timeout,
+        max_output_tokens=max_output_tokens,
+        token_counter=token_counter,
+        parallel=False,
+    )
 
     candidate_judgments: dict[str, dict[str, dict[str, Any]]] = {}
     judge_case_results: dict[str, dict[str, Any]] = {}

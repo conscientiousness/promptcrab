@@ -20,19 +20,20 @@
   <img src="assets/promptcrab-banner.png" alt="promptcrab pixel art banner" width="100%" />
 </p>
 
-`promptcrab` 是一個給下游 LLM 使用的 prompt rewrite CLI，重點是降低 token 成本，同時維持嚴格的 fidelity 檢查。
+`promptcrab` 是一個給下游 LLM 使用的 prompt rewrite CLI，重點是先提升 prompt 品質、修正一般語句問題與結構，再降低 token 成本，同時維持嚴格的 fidelity 檢查。
 
-它不是單純把文字縮短，而是會生成多個改寫候選、檢查是否保留任務語意與順序、驗證 URL、ID、key、數字等重要 literals 是否遺失，最後只回傳最安全、最精簡的版本。
+它不是單純把文字縮短，而是會先產生一份同語言的 `canonical` 改寫，讓 prompt 更清楚、更容易被另一個 LLM 正確執行。接著再從這份更乾淨的來源產生翻譯/精簡候選，並且仍以原始 prompt 做驗證、檢查 URL、ID、key、數字等重要 literals 是否遺失，最後只回傳最安全且夠精簡的版本。
 
 需要 Python 3.12 以上。
 
 ## 這個工具做什麼
 
-- 生成 `zh`、`wenyan`、`en` 三個精簡候選 prompt
+- 先把原始 prompt 改寫成一份更清楚的同語言 `canonical` 候選
+- 再從 canonical 來源產生 `zh`、`wenyan`、`en` 三個更清楚、可執行性更高的候選 prompt
 - 可選擇用獨立 judge backend 做驗證
 - 檢查重要 literals 是否遺失
 - 估算 token 數量
-- 從合法候選中選出最佳結果；若都不合法，則回退原文
+- 從合法候選中選出最佳結果，先看 fidelity 與清楚度，再看 token 節省；若都不合法，則回退原文
 
 ## 支援的 Backends
 
@@ -155,6 +156,16 @@ promptcrab \
   --model gemini-3-flash-preview \
   --prompt-file ./prompt.txt \
   --json-output
+```
+
+使用固定本地 tokenizer，取得更快且可重現的 token 計數：
+
+```bash
+promptcrab \
+  --backend codex_cli \
+  --model gpt-5.4 \
+  --prompt-file ./prompt.txt \
+  --tokenizer o200k_base
 ```
 
 把最佳 prompt 寫到檔案：
@@ -298,12 +309,15 @@ promptcrab \
 ## 備註
 
 - 若沒有任何候選通過 fidelity gate，`promptcrab` 會直接回傳原始 prompt
-- 若有設定 `--judge-backend`，`promptcrab` 會額外跑一輪 verification 才接受候選
+- 正常模式下，`promptcrab` 會先產生 `canonical` 候選，再從它產生翻譯候選；翻譯候選不會暗中切回原始 prompt 當來源
+- `wenyan` 候選必須是嚴格文言文，不允許在 `wenyan` 標籤下回傳現代中文
+- 若有設定 `--judge-backend`，`promptcrab` 會並行生成翻譯語言候選，跳過 literal 已失敗的候選 judge，並優先 judge token 最省的候選，再視需要擴大到其餘候選
 - 若省略 `--judge-backend`，`promptcrab` 會跳過 semantic verification，只保留 literal checks
 - 若想要真正獨立的 judge，請把 `--judge-backend` 設成與 `--backend` 不同
 - `promptcrab` 預設不設定 generation output cap；若特定 backend / model 需要，再傳 `--max-output-tokens`
 - `--max-output-tokens` 目前只會轉發給 `minimax` 與 `gemini`；`codex_cli` 與 `gemini_cli` 在這個 wrapper 尚未對應
-- token counting 依 backend 與憑證可用性而定
+- `promptcrab` 現在預設使用 `--tokenizer o200k_base` 的共享本地 tokenizer，避免 backend/API token counting fallback，速度較快且結果較穩定
+- 若你需要舊的 backend-native token counting 路徑，請改傳 `--tokenizer backend`
 - 最終最佳候選不看語言，只看是否有效且 token 是否最小
 
 ## Changelog

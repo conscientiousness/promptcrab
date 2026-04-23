@@ -10,11 +10,13 @@ from typing import cast
 from dotenv import find_dotenv, load_dotenv
 
 from promptcrab import __version__
+from promptcrab.constants import DEFAULT_SHARED_TOKENIZER
 from promptcrab.errors import PipelineError
 from promptcrab.models import BackendName, PipelineConfig, PipelineResult
 from promptcrab.pipeline import run_pipeline
 
 CODEX_REASONING_EFFORT_CHOICES = ["low", "medium", "high", "xhigh"]
+BACKEND_TOKENIZER_MODE = "backend"
 
 
 def make_parser() -> argparse.ArgumentParser:
@@ -89,6 +91,15 @@ def make_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--tokenizer",
+        default=DEFAULT_SHARED_TOKENIZER,
+        help=(
+            "Shared tokenizer used to count the original prompt and candidates. "
+            f"Accepts a tiktoken encoding or model name. Use {BACKEND_TOKENIZER_MODE!r} "
+            "to fall back to backend-native counting."
+        ),
+    )
+    parser.add_argument(
         "--minimax-api-key",
         help="Overrides MINIMAX_API_KEY / OPENAI_API_KEY for MiniMax.",
     )
@@ -129,10 +140,14 @@ def build_config(args: argparse.Namespace) -> PipelineConfig:
         raise PipelineError("--max-output-tokens must be a positive integer.")
     if args.judge_model and not args.judge_backend:
         raise PipelineError("--judge-model requires --judge-backend.")
+    tokenizer = args.tokenizer.strip()
+    if not tokenizer:
+        raise PipelineError("--tokenizer must be a non-empty string.")
     return PipelineConfig(
         backend=cast(BackendName, args.backend),
         model=args.model,
         prompt=read_prompt(args.prompt, args.prompt_file).strip(),
+        tokenizer=None if tokenizer == BACKEND_TOKENIZER_MODE else tokenizer,
         judge_backend=cast(BackendName | None, args.judge_backend),
         judge_model=args.judge_model,
         show_all=args.show_all,

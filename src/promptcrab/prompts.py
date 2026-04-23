@@ -37,7 +37,14 @@ def build_rewrite_user_prompt(
         Rewrite the ORIGINAL_PROMPT into {language}.
 
         Primary goal:
-        - minimize tokens while preserving meaning and actionability
+        - improve prompt effectiveness for the downstream LLM
+        - fix obvious prose-level typos, grammar issues, awkward sentence structure,
+          unclear sequencing, and weak task framing when the fix preserves intent
+        - make tasks, constraints, context, and expected output easier to execute
+
+        Secondary goal:
+        - reduce tokens only after clarity, fidelity, and actionability are preserved
+        - prefer concise wording, but do not make the prompt harder to follow
 
         Hard requirements:
         - preserve the exact meaning, intent, and expected action
@@ -55,6 +62,9 @@ def build_rewrite_user_prompt(
           left/right/bottom, screen, scroll list, and card
         - do not translate, normalize, or paraphrase technical literals or UI terms if
           another LLM or agent may need the original spelling to act correctly
+        - preserve intentional misspellings and exact wording inside literals, quoted
+          text, examples, code, field names, UI labels, URLs, IDs, and user-provided
+          data even if they look like typos
         - do not add any new information
         - do not remove required context that another LLM would need in order to act
           correctly
@@ -63,14 +73,14 @@ def build_rewrite_user_prompt(
           schema, or drop labels/counts if another agent may need the original layout
         - JSON or data samples may be minimized, but any kept structure must remain correct
         - do not break relationships between fields and values
-        - if the prompt is already dense and operational, prefer light compression over
+        - if the prompt is already dense and operational, prefer light copy-editing over
           aggressive rewriting
         - remove politeness, repetition, and filler wording
         - return only the rewritten prompt
 
         Language-specific rule:
-        - for Wenyan, use it only when it does not reduce technical precision or
-          implementation clarity
+        - for Wenyan, use actual Classical Chinese; do not label a modern Chinese rewrite
+          as Wenyan
         {conservative_block}
 
         ORIGINAL_PROMPT:
@@ -92,16 +102,18 @@ def build_verifier_user_prompt(original_prompt: str, candidate_prompt: str) -> s
         2. same task order
         3. same interaction mode and response expectation; a question should not become
            a directive check unless the original already implied that shift
-        4. no missing constraints
-        5. no missing literal data that affects execution, including URLs, IDs,
+        4. candidate is at least as clear and actionable as the original; typo or sentence
+           fixes are allowed only for ordinary prose, not protected literals
+        5. no missing constraints
+        6. no missing literal data that affects execution, including URLs, IDs,
            field names, keys, and numbers
-        6. no translated or normalized technical/UI terms when the original literal form
+        7. no translated or normalized technical/UI terms when the original literal form
            matters for implementation, including directional tokens such as
            left/right/bottom and reference tags such as [Image #1]
-        7. structured diagnostic blocks are not summarized or reformatted in a way that
+        8. structured diagnostic blocks are not summarized or reformatted in a way that
            drops labels, counts, ordering cues, or field/value relationships
-        8. no added information
-        9. no ambiguity that would make another LLM guess
+        9. no added information
+        10. no ambiguity that would make another LLM guess
 
         Return JSON only using this exact shape:
         {{

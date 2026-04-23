@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from promptcrab.constants import DEFAULT_SHARED_TOKENIZER
+
 BackendName = Literal["minimax", "gemini", "gemini_cli", "codex_cli", "opencode_cli"]
 
 
@@ -40,6 +42,7 @@ class PipelineConfig:
     backend: BackendName
     model: str
     prompt: str
+    tokenizer: str | None = DEFAULT_SHARED_TOKENIZER
     judge_backend: BackendName | None = None
     judge_model: str | None = None
     show_all: bool = False

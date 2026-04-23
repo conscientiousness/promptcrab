@@ -137,7 +137,9 @@ class FakeJudgeBackend:
 
 
 def test_run_case_once_uses_one_rewrite_panel_for_multiple_judges() -> None:
-    rewrite_backend = FakeRewriteBackend(["short winner", "invalid choice", "long valid candidate"])
+    rewrite_backend = FakeRewriteBackend(
+        ["canonical prompt", "short winner", "invalid choice", "long valid candidate"]
+    )
     judge_one = FakeJudgeBackend({"invalid choice"})
     judge_two = FakeJudgeBackend({"invalid choice"})
     case = BenchmarkCase(
@@ -162,9 +164,9 @@ def test_run_case_once_uses_one_rewrite_panel_for_multiple_judges() -> None:
         max_output_tokens=None,
     )
 
-    assert rewrite_backend.calls == 3
-    assert judge_one.calls == 3
-    assert judge_two.calls == 3
+    assert rewrite_backend.calls == 4
+    assert judge_one.calls == 4
+    assert judge_two.calls == 4
     assert result["consensus"]["pass"] is True
     assert result["consensus"]["best_lang"] == "zh"
     assert result["before_gate"]["best_lang"] == "zh"

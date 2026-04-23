@@ -20,19 +20,20 @@
   <img src="assets/promptcrab-banner.png" alt="promptcrab pixel art banner" width="80%" />
 </p>
 
-`promptcrab` is a CLI for rewriting prompts for downstream LLMs with lower token cost and strict fidelity checks.
+`promptcrab` is a CLI for rewriting prompts for downstream LLMs with quality-first copy editing, safer structure, lower token cost, and strict fidelity checks.
 
-Instead of simply shortening text, it generates multiple rewrite candidates, verifies that they preserve task meaning and ordering, checks protected literals such as URLs, IDs, keys, and numbers, and then returns the safest compact version.
+Instead of simply shortening text, it first creates a same-language canonical rewrite that makes the prompt clearer and easier for another LLM to execute. It then derives translated/compact candidates from that cleaner source, verifies them against the original prompt, checks protected literals such as URLs, IDs, keys, and numbers, and returns the safest compact version.
 
 Requires Python 3.12 or newer.
 
 ## What It Does
 
-- Rewrites a prompt into compact `zh`, `wenyan`, and `en` candidates
+- First rewrites the original prompt into a clearer same-language `canonical` candidate
+- Derives clearer, more actionable `zh`, `wenyan`, and `en` candidates from that canonical source
 - Optionally verifies each candidate with a dedicated judge backend
 - Checks whether important literals were dropped
 - Estimates token counts
-- Picks the best valid candidate, or falls back to the original prompt
+- Picks the best valid candidate, prioritizing fidelity and clarity before token savings
 
 ## Supported Backends
 
@@ -155,6 +156,16 @@ promptcrab \
   --model gemini-3-flash-preview \
   --prompt-file ./prompt.txt \
   --json-output
+```
+
+Use a fixed local tokenizer for fast, deterministic token counts:
+
+```bash
+promptcrab \
+  --backend codex_cli \
+  --model gpt-5.4 \
+  --prompt-file ./prompt.txt \
+  --tokenizer o200k_base
 ```
 
 Write the best prompt to a file:
@@ -298,12 +309,15 @@ For `codex_cli`, promptcrab can override reasoning effort with `--codex-reasonin
 ## Notes
 
 - If no candidate passes the fidelity gates, `promptcrab` returns the original prompt unchanged.
-- If you set `--judge-backend`, promptcrab runs an extra verification pass before accepting a candidate.
+- In normal mode, promptcrab generates a `canonical` candidate first, then generates translated candidates from it. Translated candidates do not silently switch back to the original prompt as their source.
+- The `wenyan` candidate is strict Wenyan; it is not allowed to return modern Chinese under the `wenyan` label.
+- If you set `--judge-backend`, promptcrab generates translated language candidates in parallel, skips judge calls for literal-invalid candidates, and judges the cheapest surviving candidate first before expanding to the rest.
 - If you omit `--judge-backend`, promptcrab skips semantic verification and only uses literal checks.
 - If you want a truly independent judge, set `--judge-backend` to a different backend than `--backend`.
 - `promptcrab` does not set a generation output cap by default; if you need one for a specific backend or model, pass `--max-output-tokens`.
 - `--max-output-tokens` is currently forwarded to `minimax` and `gemini`; `codex_cli` and `gemini_cli` do not expose a matching flag in this wrapper yet.
-- Token counting depends on backend support and available credentials.
+- `promptcrab` now defaults to shared local token counting with `--tokenizer o200k_base` for fast, deterministic counts without backend/API fallback.
+- If you need the previous backend-native token counting path, pass `--tokenizer backend`.
 - The selected best candidate is language-agnostic; whichever valid rewrite is smallest wins.
 
 ## Changelog

@@ -12,6 +12,7 @@ def make_args(**overrides: object) -> Namespace:
     base: dict[str, object] = {
         "backend": "minimax",
         "model": "MiniMax-M2.7",
+        "tokenizer": "o200k_base",
         "judge_backend": None,
         "judge_model": None,
         "prompt": "hello",
@@ -38,6 +39,7 @@ def test_build_config_leaves_max_output_tokens_unset_by_default() -> None:
     config = build_config(make_args())
 
     assert config.max_output_tokens is None
+    assert config.tokenizer == "o200k_base"
     assert config.judge_backend is None
     assert config.judge_model is None
     assert config.codex_reasoning_effort is None
@@ -52,6 +54,17 @@ def test_build_config_rejects_judge_model_without_judge_backend() -> None:
 def test_build_config_rejects_non_positive_max_output_tokens() -> None:
     with pytest.raises(PipelineError, match="positive integer"):
         build_config(make_args(max_output_tokens=0))
+
+
+def test_build_config_accepts_backend_tokenizer_mode() -> None:
+    config = build_config(make_args(tokenizer="backend"))
+
+    assert config.tokenizer is None
+
+
+def test_build_config_rejects_empty_tokenizer() -> None:
+    with pytest.raises(PipelineError, match="non-empty string"):
+        build_config(make_args(tokenizer=""))
 
 
 def test_load_environment_reads_dotenv_from_cwd(tmp_path, monkeypatch) -> None:
